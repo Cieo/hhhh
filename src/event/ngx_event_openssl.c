@@ -17,7 +17,11 @@ typedef struct {
     ngx_uint_t  engine;   /* unsigned  engine:1; */
 } ngx_openssl_conf_t;
 
-
+static time_t ngx_ssl_parse_time(
+#if OPENSSL_VERSION_NUMBER > 0x10100000L
+        const
+#endif
+        ASN1_TIME *asn1time);
 static int ngx_ssl_password_callback(char *buf, int size, int rwflag,
     void *userdata);
 static int ngx_ssl_verify_callback(int ok, X509_STORE_CTX *x509_store);
@@ -3503,7 +3507,176 @@ ngx_ssl_get_client_verify(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
 
     return NGX_OK;
 }
+ngx_int_t
+ngx_ssl_get_client_v_start(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
+{
+    BIO     *bio;
+    X509    *cert;
+    size_t   len;
 
+    s->len = 0;
+
+    cert = SSL_get_peer_certificate(c->ssl->connection);
+    if (cert == NULL) {
+        return NGX_OK;
+    }
+
+    bio = BIO_new(BIO_s_mem());
+    if (bio == NULL) {
+        X509_free(cert);
+        return NGX_ERROR;
+    }
+
+#if OPENSSL_VERSION_NUMBER > 0x10100000L
+    ASN1_TIME_print(bio, X509_get0_notBefore(cert));
+#else
+    ASN1_TIME_print(bio, X509_get_notBefore(cert));
+#endif
+
+    len = BIO_pending(bio);
+
+    s->len = len;
+    s->data = ngx_pnalloc(pool, len);
+    if (s->data == NULL) {
+        BIO_free(bio);
+        X509_free(cert);
+        return NGX_ERROR;
+    }
+
+    BIO_read(bio, s->data, len);
+    BIO_free(bio);
+    X509_free(cert);
+
+    return NGX_OK;
+}
+
+
+ngx_int_t
+ngx_ssl_get_client_v_end(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
+{
+    BIO     *bio;
+    X509    *cert;
+    size_t   len;
+
+    s->len = 0;
+
+    cert = SSL_get_peer_certificate(c->ssl->connection);
+    if (cert == NULL) {
+        return NGX_OK;
+    }
+
+    bio = BIO_new(BIO_s_mem());
+    if (bio == NULL) {
+        X509_free(cert);
+        return NGX_ERROR;
+    }
+
+#if OPENSSL_VERSION_NUMBER > 0x10100000L
+    ASN1_TIME_print(bio, X509_get0_notAfter(cert));
+#else
+    ASN1_TIME_print(bio, X509_get_notAfter(cert));
+#endif
+
+    len = BIO_pending(bio);
+
+    s->len = len;
+    s->data = ngx_pnalloc(pool, len);
+    if (s->data == NULL) {
+        BIO_free(bio);
+        X509_free(cert);
+        return NGX_ERROR;
+    }
+
+    BIO_read(bio, s->data, len);
+    BIO_free(bio);
+    X509_free(cert);
+
+    return NGX_OK;
+}
+
+
+ngx_int_t
+ngx_ssl_get_client_v_remain(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
+{
+    X509    *cert;
+    time_t   now, end;
+
+    s->len = 0;
+
+    cert = SSL_get_peer_certificate(c->ssl->connection);
+    if (cert == NULL) {
+        return NGX_OK;
+    }
+
+#if OPENSSL_VERSION_NUMBER > 0x10100000L
+    end = ngx_ssl_parse_time(X509_get0_notAfter(cert));
+#else
+    end = ngx_ssl_parse_time(X509_get_notAfter(cert));
+#endif
+
+    if (end == (time_t) NGX_ERROR) {
+        X509_free(cert);
+        return NGX_OK;
+    }
+
+    now = ngx_time();
+
+    if (end < now + 86400) {
+        ngx_str_set(s, "0");
+        X509_free(cert);
+        return NGX_OK;
+    }
+
+    s->data = ngx_pnalloc(pool, NGX_TIME_T_LEN);
+    if (s->data == NULL) {
+        X509_free(cert);
+        return NGX_ERROR;
+    }
+
+    s->len = ngx_sprintf(s->data, "%T", (end - now) / 86400) - s->data;
+
+    X509_free(cert);
+
+    return NGX_OK;
+}
+
+
+static time_t
+ngx_ssl_parse_time(
+#if OPENSSL_VERSION_NUMBER > 0x10100000L
+        const
+#endif
+        ASN1_TIME *asn1time)
+{
+    BIO     *bio;
+    char    *value;
+    size_t   len;
+    time_t   time;
+
+    /*
+     * OpenSSL doesn't provide a way to convert ASN1_TIME
+     * into time_t.  To do this, we use ASN1_TIME_print(),
+     * which uses the "MMM DD HH:MM:SS YYYY [GMT]" format (e.g.,
+     * "Feb  3 00:55:52 2015 GMT"), and parse the result.
+     */
+
+    bio = BIO_new(BIO_s_mem());
+    if (bio == NULL) {
+        return NGX_ERROR;
+    }
+
+    /* fake weekday prepended to match C asctime() format */
+
+    BIO_write(bio, "Tue ", sizeof("Tue ") - 1);
+    ASN1_TIME_print(bio, asn1time);
+    len = BIO_get_mem_data(bio, &value);
+
+    time = ngx_parse_http_time((u_char *) value, len);
+
+    BIO_free(bio);
+
+    return time;
+}
 
 static void *
 ngx_openssl_create_conf(ngx_cycle_t *cycle)

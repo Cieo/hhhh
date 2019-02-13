@@ -14,8 +14,6 @@ typedef struct {
     ngx_array_t                    caches;  /* ngx_http_file_cache_t * */
 } ngx_http_proxy_main_conf_t;
 
-typedef ngx_int_t (*ngx_ssl_variable_handler_pt)(ngx_connection_t *c,
-                                                 ngx_pool_t *pool, ngx_str_t *s);
 
 typedef struct ngx_http_proxy_rewrite_s  ngx_http_proxy_rewrite_t;
 
@@ -193,8 +191,6 @@ static char *ngx_http_proxy_cache_key(ngx_conf_t *cf, ngx_command_t *cmd,
 #if (NGX_HTTP_SSL)
 static char *ngx_http_proxy_ssl_password_file(ngx_conf_t *cf,
     ngx_command_t *cmd, void *conf);
-static ngx_int_t ngx_proxy_http_ssl_variable(ngx_http_request_t *r,
-    ngx_http_variable_value_t *v, uintptr_t data);
 #endif
 
 static char *ngx_http_proxy_lowat_check(ngx_conf_t *cf, void *post, void *data);
@@ -817,64 +813,9 @@ static ngx_http_variable_t  ngx_http_proxy_vars[] = {
       ngx_http_proxy_internal_chunked_variable, 0,
       NGX_HTTP_VAR_NOCACHEABLE|NGX_HTTP_VAR_NOHASH, 0 },
 
-    { ngx_string("proxy_ssl_client_s_dn"), NULL, ngx_proxy_http_ssl_variable,
-      (uintptr_t) ngx_ssl_get_subject_dn, NGX_HTTP_VAR_CHANGEABLE, 0 },
-
-    { ngx_string("proxy_ssl_client_i_dn"), NULL, ngx_proxy_http_ssl_variable,
-      (uintptr_t) ngx_ssl_get_issuer_dn, NGX_HTTP_VAR_CHANGEABLE, 0 },
-
-    { ngx_string("proxy_ssl_client_serial"), NULL, ngx_proxy_http_ssl_variable,
-      (uintptr_t) ngx_ssl_get_serial_number, NGX_HTTP_VAR_CHANGEABLE, 0 },
-
-    { ngx_string("proxy_ssl_client_fingerprint"), NULL, ngx_proxy_http_ssl_variable,
-      (uintptr_t) ngx_ssl_get_fingerprint, NGX_HTTP_VAR_CHANGEABLE, 0 },
-
-    { ngx_string("proxy_ssl_client_verify"), NULL, ngx_proxy_http_ssl_variable,
-      (uintptr_t) ngx_ssl_get_client_verify, NGX_HTTP_VAR_CHANGEABLE, 0 },
-
-    { ngx_string("proxy_ssl_client_v_start"), NULL, ngx_proxy_http_ssl_variable,
-      (uintptr_t) ngx_ssl_get_client_v_start, NGX_HTTP_VAR_CHANGEABLE, 0 },
-
-    { ngx_string("proxy_ssl_client_v_end"), NULL, ngx_proxy_http_ssl_variable,
-      (uintptr_t) ngx_ssl_get_client_v_end, NGX_HTTP_VAR_CHANGEABLE, 0 },
-
-    { ngx_string("proxy_ssl_client_v_remain"), NULL, ngx_proxy_http_ssl_variable,
-      (uintptr_t) ngx_ssl_get_client_v_remain, NGX_HTTP_VAR_CHANGEABLE, 0 },
-
     { ngx_null_string, NULL, NULL, 0, 0, 0 }
 };
 
-
-static ngx_int_t
-ngx_proxy_http_ssl_variable(ngx_http_request_t *r, ngx_http_variable_value_t *v,
-                      uintptr_t data)
-{
-    ngx_ssl_variable_handler_pt  handler = (ngx_ssl_variable_handler_pt) data;
-
-    ngx_str_t  s;
-
-    if (r->connection->ssl) {
-
-        if (handler(r->connection, r->pool, &s) != NGX_OK) {
-            return NGX_ERROR;
-        }
-
-        v->len = s.len;
-        v->data = s.data;
-
-        if (v->len) {
-            v->valid = 1;
-            v->no_cacheable = 0;
-            v->not_found = 0;
-
-            return NGX_OK;
-        }
-    }
-
-    v->not_found = 1;
-
-    return NGX_OK;
-}
 
 static ngx_path_init_t  ngx_http_proxy_temp_path = {
     ngx_string(NGX_HTTP_PROXY_TEMP_PATH), { 1, 2, 0 }

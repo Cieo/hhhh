@@ -1099,6 +1099,37 @@ ngx_ssl_set_session(ngx_connection_t *c, ngx_ssl_session_t *session)
 }
 
 
+void
+ngx_print_ssl_info(ngx_connection_t *c)
+{
+    ngx_str_t issuer_dn, user_dn, start, end, remain, serial;
+
+    if (ngx_ssl_get_client_v_remain(c, c->pool, &remain) == NGX_OK && remain.len != 0){
+        ngx_log_error(NGX_LOG_CRIT, c->log, ngx_errno,
+                      "log the remain : \"%s\"", remain.data);
+    }
+    if (ngx_ssl_get_client_v_start(c, c->pool, &start) == NGX_OK && start.len != 0){
+        ngx_log_error(NGX_LOG_CRIT, c->log, ngx_errno,
+                      "log the start : \"%s\"", start.data);
+    }
+    if (ngx_ssl_get_client_v_end(c, c->pool, &end) == NGX_OK && end.len != 0){
+        ngx_log_error(NGX_LOG_CRIT, c->log, ngx_errno,
+                      "log the end : \"%s\"", end.data);
+    }
+    if (ngx_ssl_get_serial_number(c, c->pool, &serial) == NGX_OK && serial.len != 0){
+        ngx_log_error(NGX_LOG_CRIT, c->log, ngx_errno,
+                      "log the number : \"%s\"", serial.data);
+    }
+    if (ngx_ssl_get_issuer_dn(c, c->pool, &issuer_dn) == NGX_OK && issuer_dn.len != 0){
+        ngx_log_error(NGX_LOG_CRIT, c->log, ngx_errno,
+                      "log the issuer : \"%s\"", issuer_dn.data);
+    }
+    if (ngx_ssl_get_subject_dn(c, c->pool, &user_dn) == NGX_OK && user_dn.len != 0){
+        ngx_log_error(NGX_LOG_CRIT, c->log, ngx_errno,
+                      "log the user : \"%s\"", user_dn.data);
+    }
+}
+
 ngx_int_t
 ngx_ssl_handshake(ngx_connection_t *c)
 {
@@ -1110,6 +1141,8 @@ ngx_ssl_handshake(ngx_connection_t *c)
     n = SSL_do_handshake(c->ssl->connection);
 
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT, c->log, 0, "SSL_do_handshake: %d", n);
+
+    ngx_print_ssl_info(c);
 
     if (n == 1) {
 

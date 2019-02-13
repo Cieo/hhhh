@@ -214,7 +214,7 @@ ngx_int_t ngx_ssl_get_client_v_end(ngx_connection_t *c, ngx_pool_t *pool,
 ngx_int_t ngx_ssl_get_client_v_remain(ngx_connection_t *c, ngx_pool_t *pool,
         ngx_str_t *s);
 
-
+void ngx_print_ssl_info(ngx_connection_t *c);
 ngx_int_t ngx_ssl_handshake(ngx_connection_t *c);
 ssize_t ngx_ssl_recv(ngx_connection_t *c, u_char *buf, size_t size);
 ssize_t ngx_ssl_write(ngx_connection_t *c, u_char *data, size_t size);
